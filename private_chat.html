@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>prvt_chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f7f7f7; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); }
+        .messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; }
+        .message { margin-bottom: 10px; }
+        .timestamp { font-size: 0.8em; color: #666; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .input-group input, .input-group button { padding: 10px; font-size: 16px; }
+        .input-group input { flex: 1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>プライベートチャットアプリ</h2>
+    <div class="chat-room">
+        <label for="threadName">スレッド名:</label>
+        <input type="text" id="threadName" placeholder="スレッド名を入力"><br>
+        <button id="createThread">スレッドを作成</button>
+        <p id="threadCode"></p>
+    </div>
+
+    <div class="chat-room">
+        <label for="roomCode">チャットルームコード:</label>
+        <input type="text" id="roomCode" placeholder="コードを入力"><br>
+        <button id="joinThread">参加</button>
+    </div>
+
+    <div class="messages" id="messages">
+        <!-- メッセージがここに表示されます -->
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="userName" placeholder="名前を入力">
+        <input type="text" id="messageInput" placeholder="メッセージを入力">
+        <button id="sendMessage">送信</button>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script>
+    // Firebase設定
+    const firebaseConfig = {
+        apiKey: "AIzaSyBL2uVvXiTUkOSOjg3qh3OK2gS_Q3y0Rwg",
+        authDomain: "private-chat-548bf.firebaseapp.com",
+        projectId: "private-chat-548bf",
+        storageBucket: "private-chat-548bf.firebasestorage.app",
+        messagingSenderId: "248759849429",
+        appId: "1:248759849429:web:0fd55c8f55c366b35d2d5c"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let currentRoom = null;
+
+    // スレッド作成
+    document.getElementById('createThread').addEventListener('click', () => {
+        const threadName = document.getElementById('threadName').value.trim();
+        if (!threadName) {
+            alert("スレッド名を入力してください");
+            return;
+        }
+
+        const threadCode = Math.random().toString(36).substr(2, 8);
+        document.getElementById('threadCode').textContent = `スレッドコード: ${threadCode}`;
+
+        const now = new Date();
+        const expirationDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 現在時刻 + 24時間
+
+        db.collection('threads').doc(threadCode).set({
+            name: threadName,
+            createdAt: now.toISOString(),
+            expiresAt: expirationDate.toISOString()
+        });
+
+        // 通知スケジュールを設定
+        scheduleDeletionWarnings(threadCode, now, expirationDate);
+    });
+
+    // 通知スケジュール
+    function scheduleDeletionWarnings(threadCode, startTime, expirationTime) {
+        const duration = expirationTime - startTime;
+        const totalHours = Math.floor(duration / (60 * 60 * 1000)); // 24時間分の通知を計算
+
+        for (let hour = 1; hour <= totalHours; hour++) {
+            const delay = hour * 60 * 60 * 1000; // 各時間の遅延を計算
+            const remainingHours = totalHours - hour;
+
+            setTimeout(() => {
+                // 残り時間の通知を表示
+                const warningMessage = `「${threadCode}」スレッド: 残り${remainingHours}時間でチャットルームが削除されます。`;
+                alert(warningMessage);
+
+                // 必要に応じて画面にも表示
+                const messagesDiv = document.getElementById('messages');
+                const div = document.createElement('div');
+                div.classList.add('message');
+                div.textContent = warningMessage;
+                messagesDiv.appendChild(div);
+            }, delay);
+        }
+    }
+
+    // メッセージ送信
+    document.getElementById('sendMessage').addEventListener('click', () => {
+        const userName = document.getElementById('userName').value.trim() || "匿名";
+        const messageInput = document.getElementById('messageInput');
+        const text = messageInput.value.trim();
+        if (!text || !currentRoom) {
+            alert("メッセージを入力してください");
+            return;
+        }
+
+        db.collection('threads').doc(currentRoom).collection('messages').add({
+            name: userName,
+            text,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        messageInput.value = '';
+    });
+
+    // スレッド参加
+document.getElementById('joinThread').addEventListener('click', () => {
+    const roomCode = document.getElementById('roomCode').value.trim();
+    if (!roomCode) {
+        alert("チャットルームコードを入力してください");
+        return;
+    }
+
+    currentRoom = roomCode;
+    document.getElementById('messages').innerHTML = '';
+
+    // ポップアップで参加メッセージを表示
+    alert(`チャットルーム「${roomCode}」に参加しました`);
+
+    db.collection('threads').doc(roomCode).collection('messages')
+        .orderBy('timestamp')
+        .onSnapshot(snapshot => {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                const timestamp = msg.timestamp?.toDate();
+                const formattedTime = timestamp
+                    ? `${timestamp.getFullYear()}-${(timestamp.getMonth() + 1).toString().padStart(2, '0')}-${timestamp.getDate().toString().padStart(2, '0')} ${timestamp.getHours().toString().padStart(2, '0')}:${timestamp.getMinutes().toString().padStart(2, '0')}:${timestamp.getSeconds().toString().padStart(2, '0')}`
+                    : "送信時刻不明";
+                const div = document.createElement('div');
+                div.classList.add('message');
+                div.innerHTML = `<strong>${msg.name}</strong>: ${msg.text} <span class="timestamp">${formattedTime}</span>`;
+                messagesDiv.appendChild(div);
+            });
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+});
+
+
+    
+    // 期限切れスレッドの削除
+    function deleteExpiredThreads() {
+        const now = new Date();
+
+        db.collection('threads').get()
+            .then(snapshot => {
+                snapshot.forEach(doc => {
+                    const thread = doc.data();
+                    const expiresAt = thread.expiresAt ? new Date(thread.expiresAt) : null;
+
+                    if (expiresAt && expiresAt <= now) {
+                        db.collection('threads').doc(doc.id).collection('messages').get()
+                            .then(messageSnapshot => {
+                                messageSnapshot.forEach(messageDoc => {
+                                    db.collection('threads').doc(doc.id).collection('messages').doc(messageDoc.id).delete();
+                                });
+                            })
+                            .then(() => {
+                                db.collection('threads').doc(doc.id).delete();
+                                console.log(`スレッド "${doc.id}" を削除しました`);
+                            });
+                    }
+                });
+            });
+    }
+
+    // 30分ごとに期限切れスレッドをチェック
+    setInterval(deleteExpiredThreads, 30 * 60 * 1000);
+</script>
+
+</body>
+</html>
