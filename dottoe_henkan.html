@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ドット絵変換ツール</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+        }
+        #dotSizeValue {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ドット絵変換ツール</h1>
+    <input type="file" id="upload" accept="image/*">
+    <br>
+    <label for="dotSize">ドット数:</label>
+    <input type="range" id="dotSize" value="1" min="1" max="100">
+    <span id="dotSizeValue">1</span>
+    <br>
+    <button id="convert">変換</button>
+    <button id="toggleGrid">マス目を表示</button>
+    <br><br>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const uploadInput = document.getElementById('upload');
+        const dotSizeInput = document.getElementById('dotSize');
+        const dotSizeValue = document.getElementById('dotSizeValue');
+        const convertButton = document.getElementById('convert');
+        const toggleGridButton = document.getElementById('toggleGrid');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let image = new Image();
+        let showGrid = false;
+
+        uploadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                image.src = e.target.result;
+                image.onload = () => {
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    ctx.drawImage(image, 0, 0);
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        dotSizeInput.addEventListener('input', () => {
+            dotSizeValue.textContent = dotSizeInput.value;
+        });
+
+        convertButton.addEventListener('click', () => {
+            const dotSize = 101 - parseInt(dotSizeInput.value); // スライダーの値を反転
+            const width = Math.ceil(image.width / dotSize);
+            const height = Math.ceil(image.height / dotSize);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.drawImage(image, 0, 0, width, height);
+            const imageData = tempCtx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = (y * width + x) * 4;
+                    const r = data[index];
+                    const g = data[index + 1];
+                    const b = data[index + 2];
+                    const a = data[index + 3];
+
+                    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+                    ctx.fillRect(x * dotSize, y * dotSize, dotSize, dotSize);
+                }
+            }
+
+            if (showGrid) {
+                drawGrid(dotSize, width, height);
+            }
+        });
+
+        toggleGridButton.addEventListener('click', () => {
+            showGrid = !showGrid;
+            toggleGridButton.textContent = showGrid ? 'マス目を非表示' : 'マス目を表示';
+            const dotSize = 101 - parseInt(dotSizeInput.value); // スライダーの値を反転
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(image, 0, 0);
+            if (showGrid) {
+                drawGrid(dotSize);
+            }
+        });
+
+        function drawGrid(dotSize, width = Math.ceil(image.width / dotSize), height = Math.ceil(image.height / dotSize)) {
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= width * dotSize; x += dotSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height * dotSize);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= height * dotSize; y += dotSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width * dotSize, y);
+                ctx.stroke();
+            }
+        }
+    </script>
+</body>
+</html>
