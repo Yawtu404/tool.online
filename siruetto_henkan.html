@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像の透明でない部分を一色に置き換え</title>
+</head>
+<body>
+
+<input type="file" id="upload" accept="image/*">
+<br>
+<canvas id="canvas"></canvas>
+<br>
+<label for="color">色を選択:</label>
+<input type="color" id="color" value="#ff0000">
+<br><br>
+<button id="downloadButton" disabled>ダウンロード</button>
+
+<script>
+    const upload = document.getElementById('upload');
+    const canvas = document.getElementById('canvas');
+    const colorPicker = document.getElementById('color');
+    const downloadButton = document.getElementById('downloadButton');
+    const ctx = canvas.getContext('2d');
+
+    upload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                recolorImage();
+                downloadButton.disabled = false; // ダウンロードボタンを有効化
+            };
+        }
+    });
+
+    colorPicker.addEventListener('input', recolorImage);
+
+    downloadButton.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = 'processed-image.png';
+        link.click();
+    });
+
+    function recolorImage() {
+        if (canvas.width === 0 || canvas.height === 0) return;
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // 選択した色を取得
+        const hexColor = colorPicker.value;
+        const rNew = parseInt(hexColor.substr(1, 2), 16);
+        const gNew = parseInt(hexColor.substr(3, 2), 16);
+        const bNew = parseInt(hexColor.substr(5, 2), 16);
+
+        // 各ピクセルを処理
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3];
+            if (alpha > 0) { // 透明でない部分
+                data[i] = rNew;       // 赤
+                data[i + 1] = gNew;   // 緑
+                data[i + 2] = bNew;   // 青
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+</script>
+
+</body>
+</html>
+
