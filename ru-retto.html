@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>単語ルーレット</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        #roulette {
+            display: inline-block;
+            width: 200px;
+            height: 100px;
+            border: 3px solid #000;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px auto;
+            overflow: hidden;
+            position: relative;
+            background-color: #f4f4f4;
+        }
+        #startButton, #retryButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #startButton:hover, #retryButton:hover {
+            background-color: #45a049;
+        }
+        ul {
+            margin: 20px auto;
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            font-size: 18px;
+            margin: 5px;
+        }
+        #addWordInput {
+            padding: 10px;
+            font-size: 18px;
+        }
+        #addWordButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #addWordButton:hover {
+            background-color: #1976D2;
+        }
+        #retryButton {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>単語ルーレット</h1>
+    <div id="roulette">?</div>
+    <button id="startButton">スタート</button>
+    <div id="result"></div>
+
+    <h3>単語一覧</h3>
+    <ul id="wordList">
+        <!-- 単語リストはここに追加されます -->
+    </ul>
+
+    <h3>単語を追加</h3>
+    <input type="text" id="addWordInput" placeholder="単語を入力" />
+    <button id="addWordButton">追加</button>
+
+    <button id="retryButton" style="display: none;">もう一度ルーレットを回す</button>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const roulette = document.getElementById('roulette');
+            const startButton = document.getElementById('startButton');
+            const retryButton = document.getElementById('retryButton');
+            const wordList = document.getElementById('wordList');
+            const addWordInput = document.getElementById('addWordInput');
+            const addWordButton = document.getElementById('addWordButton');
+            let interval;
+
+            // スタートボタンの処理
+            startButton.addEventListener('click', () => {
+                const words = Array.from(wordList.children).map(li => li.textContent); // HTMLから単語を取得
+                if (words.length === 0) {
+                    alert("単語が設定されていません。");
+                    return;
+                }
+
+                roulette.textContent = "?"; // 初期化
+                startButton.disabled = true; // ボタンを無効化
+
+                // 高速で単語を切り替える
+                let currentIndex = 0;
+                interval = setInterval(() => {
+                    roulette.textContent = words[currentIndex];
+                    currentIndex = (currentIndex + 1) % words.length; // 次の単語へ
+                }, 100); // 100msごとに切り替え
+
+                // 2秒後にルーレットを止めて結果を表示
+                setTimeout(() => {
+                    clearInterval(interval);
+                    const randomWord = words[Math.floor(Math.random() * words.length)];
+                    roulette.textContent = randomWord; // 最終的な結果を表示
+                    roulette.style.color = 'red'; // 結果を赤色に変更
+                    startButton.disabled = true; // もう一度ボタンを無効化
+                    retryButton.style.display = 'inline-block'; // 「もう一度ルーレットを回す」ボタンを表示
+                }, 2000); // 2秒後に止まる
+            });
+
+            // もう一度ルーレットを回すボタンの処理
+            retryButton.addEventListener('click', () => {
+                roulette.textContent = "?"; // 初期化
+                roulette.style.color = 'black'; // 色を戻す
+                retryButton.style.display = 'none'; // ボタンを非表示に
+                startButton.disabled = false; // スタートボタンを有効化
+            });
+
+            // 単語を追加するボタンの処理
+            addWordButton.addEventListener('click', () => {
+                const newWord = addWordInput.value.trim();
+                if (newWord !== "") {
+                    const li = document.createElement('li');
+                    li.textContent = newWord;
+                    wordList.appendChild(li);
+                    addWordInput.value = ""; // 入力フィールドをクリア
+                } else {
+                    alert("単語を入力してください");
+                }
+            });
+        });
+    </script>
+</body>
+</html>
