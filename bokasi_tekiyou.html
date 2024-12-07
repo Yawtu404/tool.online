@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ぼかし適用ツール</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+      background-color: #f4f4f4;
+      margin: 0;
+    }
+    .container {
+      text-align: center;
+    }
+    input[type="file"] {
+      margin: 10px 0;
+    }
+    #blurSlider {
+      margin: 10px 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>ぼかし適用ツール</h1>
+    <h3>※先にぼかし度を指定してください</h3>
+    <input type="file" id="imageInput" accept="image/*">
+    <br>
+    <label for="blurSlider">ぼかし強度: <span id="blurValue">0</span>px</label>
+    <input type="range" id="blurSlider" min="0" max="20" value="0">
+    <br>
+    <canvas id="canvas"></canvas>
+    <br>
+    <button id="downloadBtn">画像をダウンロード</button>
+  </div>
+
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const blurSlider = document.getElementById('blurSlider');
+    const blurValue = document.getElementById('blurValue');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const downloadBtn = document.getElementById('downloadBtn');
+    
+    let image = new Image();
+    
+    // 画像が選択されたとき
+    imageInput.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          image.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // 画像が読み込まれた後の処理
+    image.onload = function() {
+      canvas.width = image.width;
+      canvas.height = image.height;
+      ctx.drawImage(image, 0, 0);
+      applyBlur();
+    };
+
+    // ぼかし強度を調整した時の処理
+    blurSlider.addEventListener('input', function() {
+      const blurAmount = blurSlider.value;
+      blurValue.textContent = blurAmount;
+      applyBlur();
+    });
+
+    // ぼかしを適用する関数
+    function applyBlur() {
+      const blurAmount = blurSlider.value;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);  // 既存の描画をクリア
+      ctx.filter = `blur(${blurAmount}px)`;              // ぼかしを適用
+      ctx.drawImage(image, 0, 0);
+    }
+
+    // ダウンロードボタンの処理
+    downloadBtn.addEventListener('click', function() {
+      const dataURL = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'blurred_image.png';
+      link.click();
+    });
+  </script>
+
+</body>
+</html>
