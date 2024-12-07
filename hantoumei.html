@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>半透明画像作成</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .download-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .download-btn:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>半透明画像作成</h1>
+    
+    <label for="color">色を選択:</label>
+    <input type="color" id="color" value="#ff0000">
+    
+    <br><br>
+    
+    <label for="opacity">不透明度を選択:</label>
+    <input type="range" id="opacity" min="0" max="1" step="0.01" value="1">
+    <span id="opacity-value">1</span>
+    
+    <br><br>
+    
+    <canvas id="canvas" width="400" height="400" style="border:1px solid #000;"></canvas>
+    
+    <br>
+    
+    <button class="download-btn" id="download-btn" style="display:none;">画像をダウンロード</button>
+  </div>
+
+  <script>
+    const colorInput = document.getElementById('color');
+    const opacityInput = document.getElementById('opacity');
+    const opacityValue = document.getElementById('opacity-value');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const downloadBtn = document.getElementById('download-btn');
+    
+    function drawImage() {
+      const color = colorInput.value;
+      const opacity = opacityInput.value;
+      
+      // 画像を描画
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // キャンバスをクリア
+      ctx.globalAlpha = opacity; // 不透明度を設定
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, canvas.width, canvas.height); // 色で塗りつぶす
+      
+      // ダウンロードボタンの表示
+      downloadBtn.style.display = 'inline-block';
+    }
+    
+    // 不透明度の変更イベント
+    opacityInput.addEventListener('input', () => {
+      opacityValue.textContent = opacityInput.value;
+      drawImage();
+    });
+    
+    // 色の変更イベント
+    colorInput.addEventListener('input', drawImage);
+    
+    // ダウンロードボタンの処理
+    downloadBtn.addEventListener('click', () => {
+      const imageUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = 'generated-image.png';
+      link.click();
+    });
+
+    // 初期描画
+    drawImage();
+  </script>
+</body>
+</html>
