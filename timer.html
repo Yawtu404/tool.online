@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タイマー</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        input, select, button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>タイマー</h1>
+    <label for="hours">時間：</label>
+    <input type="number" id="hours" min="0" value="0">
+    <label for="minutes">分：</label>
+    <input type="number" id="minutes" min="0" value="0">
+    <label for="seconds">秒：</label>
+    <input type="number" id="seconds" min="0" value="0">
+    <br>
+    <label for="soundSelect">タイマー音：</label>
+    <select id="soundSelect">
+        <option value="timer1.mp3">音1</option>
+        <option value="timer2.mp3">音2</option>
+        <option value="timer3.mp3" selected>音3</option>
+    </select>
+    <br>
+    <button id="startButton">スタート</button>
+    <h2 id="timeDisplay">00:00:00</h2>
+    <audio id="timerSound" preload="auto"></audio>
+
+    <script>
+        const startButton = document.getElementById("startButton");
+        const hoursInput = document.getElementById("hours");
+        const minutesInput = document.getElementById("minutes");
+        const secondsInput = document.getElementById("seconds");
+        const timeDisplay = document.getElementById("timeDisplay");
+        const soundSelect = document.getElementById("soundSelect");
+        const timerSound = document.getElementById("timerSound");
+        let timerInterval;
+
+        startButton.addEventListener("click", () => {
+            const hours = parseInt(hoursInput.value, 10) || 0;
+            const minutes = parseInt(minutesInput.value, 10) || 0;
+            const seconds = parseInt(secondsInput.value, 10) || 0;
+
+            let totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
+
+            if (totalSeconds <= 0) {
+                alert("正しい時間を入力してください");
+                return;
+            }
+
+            // タイマー音を選択
+            timerSound.src = soundSelect.value;
+
+            updateTimeDisplay(totalSeconds);
+
+            // 既存のタイマーをクリア
+            clearInterval(timerInterval);
+
+            // タイマー開始
+            timerInterval = setInterval(() => {
+                totalSeconds--;
+                updateTimeDisplay(totalSeconds);
+
+                if (totalSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    timerSound.play();
+                    if (confirm("タイマーがなりました")) {
+                        timerSound.pause();
+                        timerSound.currentTime = 0;
+                    }
+                }
+            }, 1000);
+        });
+
+        function updateTimeDisplay(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const remainingSecondsAfterHours = seconds % 3600;
+            const minutes = Math.floor(remainingSecondsAfterHours / 60);
+            const remainingSeconds = remainingSecondsAfterHours % 60;
+
+            timeDisplay.textContent = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+        }
+    </script>
+</body>
+</html>
