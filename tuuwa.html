@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC通話アプリ</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #localAudio, #remoteAudio {
+            margin: 10px 0;
+        }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        input {
+            padding: 5px;
+            font-size: 1em;
+        }
+        .user-status {
+            margin-top: 10px;
+        }
+        .active {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC 通話アプリ</h1>
+    <div>
+        <button id="createCall">通話を作成</button>
+        <p id="callCodeDisplay"></p>
+    </div>
+    <div id="controls">
+        <input id="callCodeInput" type="text" placeholder="通話コードを入力">
+        <input id="userNameInput" type="text" placeholder="表示名を入力">
+        <button id="joinCall">参加</button>
+    </div>
+    <div id="popup" style="display:none; border: 1px solid #000; padding: 10px; margin-top: 10px;">
+        <p id="popupText"></p>
+        <button onclick="document.getElementById('popup').style.display='none'">閉じる</button>
+    </div>
+    <div class="user-status">
+        <p id="localUserName"></p>
+        <p id="remoteUserName"></p>
+    </div>
+    <h2>オーディオ</h2>
+    <audio id="localAudio" controls autoplay muted></audio>
+    <audio id="remoteAudio" controls autoplay></audio>
+
+    <script>
+        // Firebase設定
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Firebase初期化
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.getDatabase(app);
+
+        // 要素の取得
+        const createCallButton = document.getElementById("createCall");
+        const callCodeDisplay = document.getElementById("callCodeDisplay");
+        const callCodeInput = document.getElementById("callCodeInput");
+        const userNameInput = document.getElementById("userNameInput");
+        const joinCallButton = document.getElementById("joinCall");
+        const localAudio = document.getElementById("localAudio");
+        const remoteAudio = document.getElementById("remoteAudio");
+        const popup = document.getElementById("popup");
+        const popupText = document.getElementById("popupText");
+        const localUserNameDisplay = document.getElementById("localUserName");
+        const remoteUserNameDisplay = document.getElementById("remoteUserName");
+
+        let currentCallCode = null;
+        let userName = "";
+
+        // WebRTC関連変数
+        let localStream = null;
+        let peerConnection = null;
+        const configuration = {
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        };
+
+        // 通話を作成
+        createCallButton.addEventListener("click", async () => {
+            currentCallCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+            callCodeDisplay.textContent = `通話コード: ${currentCallCode}`;
+
+            const callRef = firebase.ref(db, `calls/${currentCallCode}`);
+            firebase.set(callRef, {});
+
+            alert(`通話コードが生成されました: ${currentCallCode}`);
+            await setupLocalStream();
+            localUserNameDisplay.textContent = "あなた (ローカル)";
+        });
+
+        // 通話に参加
+        joinCallButton.addEventListener("click", async () => {
+            currentCallCode = callCodeInput.value.trim();
+            userName = userNameInput.value.trim();
+
+            if (!currentCallCode) {
+                alert("通話コードを入力してください！");
+                return;
+            }
+
+            if (!userName) {
+                alert("表示名を入力してください！");
+                return;
+            }
+
+            popupText.textContent = `${userName} が通話 "${currentCallCode}" に参加しました`;
+            popup.style.display = "block";
+
+            localUserNameDisplay.textContent = `${userName} (ローカル)`;
+            await setupLocalStream();
+            setupConnectionListeners();
+        });
+
+        // ローカル音声ストリームを設定
+        async function setupLocalStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                localAudio.srcObject = localStream;
+                monitorAudioActivity(localStream, localUserNameDisplay);
+            } catch (error) {
+                console.error("音声の取得に失敗しました: ", error);
+            }
+
+            setupPeerConnection();
+        }
+
+        // PeerConnectionを設定
+        function setupPeerConnection() {
+            peerConnection = new RTCPeerConnection(configuration);
+
+            // ローカルストリームを追加
+            localStream.getTracks().forEach((track) => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // リモートストリームを受信
+            peerConnection.addEventListener("track", (event) => {
+                const [remoteStream] = event.streams;
+                remoteAudio.srcObject = remoteStream;
+                monitorAudioActivity(remoteStream, remoteUserNameDisplay);
+                remoteUserNameDisplay.textContent = "リモートユーザー";
+            });
+
+            // ICE候補を送信
+            peerConnection.addEventListener("icecandidate", (event) => {
+                if (event.candidate) {
+                    const iceRef = firebase.ref(db, `calls/${currentCallCode}/iceCandidates`);
+                    firebase.push(iceRef, event.candidate.toJSON());
+                }
+            });
+        }
+
+        // シグナリングリスナーを設定
+        function setupConnectionListeners() {
+            const callRef = firebase.ref(db, `calls/${currentCallCode}`);
+            const offerRef = firebase.ref(callRef, "offer");
+            const answerRef = firebase.ref(callRef, "answer");
+            const iceRef = firebase.ref(callRef, "iceCandidates");
+
+            // オファーを受信
+            firebase.onValue(offerRef, async (snapshot) => {
+                if (snapshot.exists()) {
+                    const offer = snapshot.val();
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+                    // アンサーを作成して送信
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    firebase.set(answerRef, peerConnection.localDescription.toJSON());
+                }
+            });
+
+            // アンサーを受信
+            firebase.onValue(answerRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    const answer = snapshot.val();
+                    peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                }
+            });
+
+            // ICE候補を受信
+            firebase.onValue(iceRef, (snapshot) => {
+                snapshot.forEach((childSnapshot) => {
+                    const candidate = new RTCIceCandidate(childSnapshot.val());
+                    peerConnection.addIceCandidate(candidate);
+                });
+            });
+        }
+
+        // 音声アクティビティを監視
+        function monitorAudioActivity(stream, userElement) {
+            const audioContext = new AudioContext();
+            const analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            analyser.fftSize = 512;
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function checkActivity() {
+                analyser.getByteFrequencyData(dataArray);
+                const sum = dataArray.reduce((a, b) => a + b, 0);
+                if (sum > 1000) {
+                    userElement.classList.add("active");
+                } else {
+                    userElement.classList.remove("active");
+                }
+                requestAnimationFrame(checkActivity);
+            }
+            checkActivity();
+        }
+    </script>
+</body>
+</html>
