@@ -1,233 +1,165 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC通話アプリ</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js"></script>
+    <title>通話アプリ</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        #localAudio, #remoteAudio {
-            margin: 10px 0;
-        }
-        #controls {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        input {
-            padding: 5px;
-            font-size: 1em;
-        }
-        .user-status {
-            margin-top: 10px;
-        }
-        .active {
-            color: green;
-            font-weight: bold;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f0f0f0; padding: 20px; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .participants { margin-top: 20px; }
+        .participant { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background: #fff; transition: border-color 0.1s, background-color 0.1s, opacity 0.1s; }
+        .participant.speaking { border-color: green; background-color: #d4edda; }
+        .participant.mic-off { opacity: 0.5; }
+        .controls { margin-top: 20px; }
+        #toggleMic { padding: 10px; border: none; border-radius: 5px; cursor: pointer; }
+        #toggleMic.on { background-color: green; color: white; }
+        #toggleMic.off { background-color: red; color: white; }
+        #errorMessage { color: red; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>WebRTC 通話アプリ</h1>
-    <div>
-        <button id="createCall">通話を作成</button>
-        <p id="callCodeDisplay"></p>
+    <div class="container">
+        <h1>通話アプリ</h1>
+        <div>
+            <button id="createCall">通話を作成</button>
+            <p id="callCode"></p>
+        </div>
+        <div>
+            <input type="text" id="codeInput" placeholder="通話コードを入力">
+            <input type="text" id="nameInput" placeholder="表示名を入力">
+            <button id="joinCall">参加</button>
+            <p id="errorMessage"></p>
+        </div>
+        <div class="participants" id="participants"></div>
+        <div class="controls">
+            <button id="toggleMic" class="on">マイクオン</button>
+        </div>
     </div>
-    <div id="controls">
-        <input id="callCodeInput" type="text" placeholder="通話コードを入力">
-        <input id="userNameInput" type="text" placeholder="表示名を入力">
-        <button id="joinCall">参加</button>
-    </div>
-    <div id="popup" style="display:none; border: 1px solid #000; padding: 10px; margin-top: 10px;">
-        <p id="popupText"></p>
-        <button onclick="document.getElementById('popup').style.display='none'">閉じる</button>
-    </div>
-    <div class="user-status">
-        <p id="localUserName"></p>
-        <p id="remoteUserName"></p>
-    </div>
-    <h2>オーディオ</h2>
-    <audio id="localAudio" controls autoplay muted></audio>
-    <audio id="remoteAudio" controls autoplay></audio>
 
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
     <script>
-        // Firebase設定
         const firebaseConfig = {
             apiKey: "AIzaSyDcyyKnRU3btWBfjPNyF_HE6gibCU6pORw",
-            authDomain: "tuuwa-7c367.firebaseapp.com",
-            databaseURL: "https://tuuwa-7c367-default-rtdb.firebaseio.com",
-            projectId: "tuuwa-7c367",
-            storageBucket: "tuuwa-7c367.firebasestorage.app",
-            messagingSenderId: "670942585722",
-            appId: "1:670942585722:web:0c6fc481290e7aa5536cc3"
+  authDomain: "tuuwa-7c367.firebaseapp.com",
+  databaseURL: "https://tuuwa-7c367-default-rtdb.firebaseio.com",
+  projectId: "tuuwa-7c367",
         };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
-        // Firebase初期化
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.getDatabase(app);
+        let callCode = null;
+        let userName = null;
+        let micOn = true;
+        let participantId = null; // 既存参加者のIDを追跡
 
-        // 要素の取得
-        const createCallButton = document.getElementById("createCall");
-        const callCodeDisplay = document.getElementById("callCodeDisplay");
-        const callCodeInput = document.getElementById("callCodeInput");
-        const userNameInput = document.getElementById("userNameInput");
-        const joinCallButton = document.getElementById("joinCall");
-        const localAudio = document.getElementById("localAudio");
-        const remoteAudio = document.getElementById("remoteAudio");
-        const popup = document.getElementById("popup");
-        const popupText = document.getElementById("popupText");
-        const localUserNameDisplay = document.getElementById("localUserName");
-        const remoteUserNameDisplay = document.getElementById("remoteUserName");
-
-        let currentCallCode = null;
-        let userName = "";
-
-        // WebRTC関連変数
-        let localStream = null;
-        let peerConnection = null;
-        const configuration = {
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-        };
-
-        // 通話を作成
-        createCallButton.addEventListener("click", async () => {
-            currentCallCode = Math.random().toString(36).substr(2, 6).toUpperCase();
-            callCodeDisplay.textContent = `通話コード: ${currentCallCode}`;
-
-            const callRef = firebase.ref(db, `calls/${currentCallCode}`);
-            firebase.set(callRef, {});
-
-            alert(`通話コードが生成されました: ${currentCallCode}`);
-            await setupLocalStream();
-            localUserNameDisplay.textContent = "あなた (ローカル)";
+        document.getElementById('createCall').addEventListener('click', () => {
+            callCode = Math.random().toString(36).substr(2, 8);
+            document.getElementById('callCode').textContent = `通話コード: ${callCode}`;
+            db.collection('calls').doc(callCode).set({ createdAt: new Date() });
         });
 
-        // 通話に参加
-        joinCallButton.addEventListener("click", async () => {
-            currentCallCode = callCodeInput.value.trim();
-            userName = userNameInput.value.trim();
+        document.getElementById('joinCall').addEventListener('click', async () => {
+            const codeInput = document.getElementById('codeInput').value.trim();
+            const nameInput = document.getElementById('nameInput').value.trim();
+            const errorMessage = document.getElementById('errorMessage');
 
-            if (!currentCallCode) {
-                alert("通話コードを入力してください！");
+            if (!codeInput || !nameInput) {
+                errorMessage.textContent = "通話コードと名前を入力してください。";
                 return;
             }
 
-            if (!userName) {
-                alert("表示名を入力してください！");
+            callCode = codeInput;
+            userName = nameInput;
+
+            const doc = await db.collection('calls').doc(callCode).get();
+            if (!doc.exists) {
+                errorMessage.textContent = `"${callCode}" が存在しません。`;
                 return;
             }
 
-            popupText.textContent = `${userName} が通話 "${currentCallCode}" に参加しました`;
-            popup.style.display = "block";
+            // 既存の参加者を確認
+            const participantSnapshot = await db.collection('calls').doc(callCode).collection('participants')
+                .where('name', '==', userName).get();
 
-            localUserNameDisplay.textContent = `${userName} (ローカル)`;
-            await setupLocalStream();
-            setupConnectionListeners();
-        });
-
-        // ローカル音声ストリームを設定
-        async function setupLocalStream() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                localAudio.srcObject = localStream;
-                monitorAudioActivity(localStream, localUserNameDisplay);
-            } catch (error) {
-                console.error("音声の取得に失敗しました: ", error);
-            }
-
-            setupPeerConnection();
-        }
-
-        // PeerConnectionを設定
-        function setupPeerConnection() {
-            peerConnection = new RTCPeerConnection(configuration);
-
-            // ローカルストリームを追加
-            localStream.getTracks().forEach((track) => {
-                peerConnection.addTrack(track, localStream);
-            });
-
-            // リモートストリームを受信
-            peerConnection.addEventListener("track", (event) => {
-                const [remoteStream] = event.streams;
-                remoteAudio.srcObject = remoteStream;
-                monitorAudioActivity(remoteStream, remoteUserNameDisplay);
-                remoteUserNameDisplay.textContent = "リモートユーザー";
-            });
-
-            // ICE候補を送信
-            peerConnection.addEventListener("icecandidate", (event) => {
-                if (event.candidate) {
-                    const iceRef = firebase.ref(db, `calls/${currentCallCode}/iceCandidates`);
-                    firebase.push(iceRef, event.candidate.toJSON());
-                }
-            });
-        }
-
-        // シグナリングリスナーを設定
-        function setupConnectionListeners() {
-            const callRef = firebase.ref(db, `calls/${currentCallCode}`);
-            const offerRef = firebase.ref(callRef, "offer");
-            const answerRef = firebase.ref(callRef, "answer");
-            const iceRef = firebase.ref(callRef, "iceCandidates");
-
-            // オファーを受信
-            firebase.onValue(offerRef, async (snapshot) => {
-                if (snapshot.exists()) {
-                    const offer = snapshot.val();
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-                    // アンサーを作成して送信
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    firebase.set(answerRef, peerConnection.localDescription.toJSON());
-                }
-            });
-
-            // アンサーを受信
-            firebase.onValue(answerRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    const answer = snapshot.val();
-                    peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                }
-            });
-
-            // ICE候補を受信
-            firebase.onValue(iceRef, (snapshot) => {
-                snapshot.forEach((childSnapshot) => {
-                    const candidate = new RTCIceCandidate(childSnapshot.val());
-                    peerConnection.addIceCandidate(candidate);
+            if (!participantSnapshot.empty) {
+                // 既存の参加者がいる場合
+                participantId = participantSnapshot.docs[0].id;
+                errorMessage.textContent = ""; // エラーメッセージをリセット
+                alert(`既に通話 "${callCode}" に参加しています。`);
+            } else {
+                // 新しい参加者を追加
+                const newParticipant = await db.collection('calls').doc(callCode).collection('participants').add({
+                    name: userName,
+                    micOn: true,
+                    speaking: false
                 });
-            });
-        }
-
-        // 音声アクティビティを監視
-        function monitorAudioActivity(stream, userElement) {
-            const audioContext = new AudioContext();
-            const analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
-            analyser.fftSize = 512;
-
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            function checkActivity() {
-                analyser.getByteFrequencyData(dataArray);
-                const sum = dataArray.reduce((a, b) => a + b, 0);
-                if (sum > 1000) {
-                    userElement.classList.add("active");
-                } else {
-                    userElement.classList.remove("active");
-                }
-                requestAnimationFrame(checkActivity);
+                participantId = newParticipant.id;
+                alert(`通話 "${callCode}" に参加しました`);
             }
-            checkActivity();
+
+            startAudioProcessing();
+            listenToParticipants();
+        });
+
+        async function startAudioProcessing() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const analyser = audioContext.createAnalyser();
+                const microphone = audioContext.createMediaStreamSource(stream);
+                const javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+                analyser.smoothingTimeConstant = 0.8;
+                analyser.fftSize = 1024;
+
+                microphone.connect(analyser);
+                analyser.connect(javascriptNode);
+                javascriptNode.connect(audioContext.destination);
+
+                javascriptNode.onaudioprocess = () => {
+                    const array = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(array);
+                    const volume = array.reduce((a, b) => a + b, 0) / array.length;
+
+                    // 音量が一定値を超えたら話している状態を更新
+                    const speaking = volume > 20; // 音量の閾値を調整
+                    if (participantId) {
+                        db.collection('calls').doc(callCode).collection('participants').doc(participantId).update({ speaking });
+                    }
+                };
+            } catch (error) {
+                console.error("マイクにアクセスできません: ", error);
+            }
         }
+
+        function listenToParticipants() {
+            const participantsDiv = document.getElementById('participants');
+            db.collection('calls').doc(callCode).collection('participants')
+                .onSnapshot(snapshot => {
+                    participantsDiv.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const participant = doc.data();
+                        const div = document.createElement('div');
+                        div.textContent = participant.name;
+                        div.className = `participant ${participant.speaking ? 'speaking' : ''} ${!participant.micOn ? 'mic-off' : ''}`;
+                        participantsDiv.appendChild(div);
+                    });
+                });
+        }
+
+        document.getElementById('toggleMic').addEventListener('click', () => {
+            micOn = !micOn;
+
+            const micButton = document.getElementById('toggleMic');
+            micButton.textContent = micOn ? "マイクオン" : "マイクオフ";
+            micButton.className = micOn ? "on" : "off";
+
+            if (participantId) {
+                db.collection('calls').doc(callCode).collection('participants').doc(participantId).update({ micOn });
+            }
+        });
     </script>
 </body>
 </html>
