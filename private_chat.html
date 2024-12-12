@@ -61,28 +61,29 @@
     let currentRoom = null;
 
     // スレッド作成
-    document.getElementById('createThread').addEventListener('click', () => {
-        const threadName = document.getElementById('threadName').value.trim();
-        if (!threadName) {
-            alert("スレッド名を入力してください");
-            return;
-        }
+document.getElementById('createThread').addEventListener('click', () => {
+    const threadName = document.getElementById('threadName').value.trim();
+    if (!threadName) {
+        alert("スレッド名を入力してください");
+        return;
+    }
 
-        const threadCode = Math.random().toString(36).substr(2, 8);
-        document.getElementById('threadCode').textContent = `スレッドコード: ${threadCode}`;
+    // 数字6桁のコードを生成
+    const threadCode = Math.floor(100000 + Math.random() * 900000).toString();
+    document.getElementById('threadCode').textContent = `スレッドコード: ${threadCode}`;
 
-        const now = new Date();
-        const expirationDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 現在時刻 + 24時間
+    const now = new Date();
+    const expirationDate = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 現在時刻 + 24時間
 
-        db.collection('threads').doc(threadCode).set({
-            name: threadName,
-            createdAt: now.toISOString(),
-            expiresAt: expirationDate.toISOString()
-        });
-
-        // 通知スケジュールを設定
-        scheduleDeletionWarnings(threadCode, now, expirationDate);
+    db.collection('threads').doc(threadCode).set({
+        name: threadName,
+        createdAt: now.toISOString(),
+        expiresAt: expirationDate.toISOString()
     });
+
+    // 通知スケジュールを設定
+    scheduleDeletionWarnings(threadCode, now, expirationDate);
+});
 
     // 通知スケジュール
     function scheduleDeletionWarnings(threadCode, startTime, expirationTime) {
