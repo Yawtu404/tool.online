@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音量測定器</title>
+    <style>
+        #volumeMeter {
+            width: 100%;
+            height: 30px;
+            background: lightgray;
+        }
+        #volumeBar {
+            height: 100%;
+            width: 0;
+            background: green;
+        }
+        #dBValue {
+            font-size: 18px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>音量測定器</h1>
+    <div id="volumeMeter">
+        <div id="volumeBar"></div>
+    </div>
+    <p id="status">音声を拾っています...</p>
+    <p id="dBValue">音量: 0 dB</p>
+
+    <script>
+        // 音量の測定を行うための変数
+        let audioContext;
+        let analyser;
+        let microphone;
+        let javascriptNode;
+
+        // 音量測定器のUI要素
+        const volumeBar = document.getElementById('volumeBar');
+        const status = document.getElementById('status');
+        const dBValue = document.getElementById('dBValue');
+
+        // 音声を取得して音量を測定
+        function startAudio() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        // AudioContextの初期化
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                        // マイク入力の設定
+                        microphone = audioContext.createMediaStreamSource(stream);
+
+                        // 音声解析用のAnalyserNodeを作成
+                        analyser = audioContext.createAnalyser();
+                        analyser.fftSize = 256;
+
+                        // JavaScriptNodeの作成
+                        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+                        // マイクからのデータをAnalyserNodeに接続
+                        microphone.connect(analyser);
+                        analyser.connect(javascriptNode);
+                        javascriptNode.connect(audioContext.destination);
+
+                        // 音量を計算する処理
+                        javascriptNode.onaudioprocess = function () {
+                            let array = new Uint8Array(analyser.frequencyBinCount);
+                            analyser.getByteFrequencyData(array);
+
+                            // 音量の計算（最大の音量値を取得）
+                            let sum = 0;
+                            array.forEach(value => sum += value);
+                            let average = sum / array.length;
+
+                            // 音量をdBで計算（正確に表示するためのスケーリング）
+                            let volume = average / 255; // 0〜1の範囲に正規化
+                            let dB = 20 * Math.log10(volume * 100); // スケールを適用してdBを計算
+                            if (dB < 0) dB = 0; // 負の値を0に固定
+
+                            // 音量を表示
+                            volumeBar.style.width = (volume * 100) + '%';
+
+                            // dBを表示
+                            dBValue.textContent = "音量: " + dB.toFixed(2) + " dB";
+                        };
+
+                        status.textContent = "音声が正常に取得されています";
+                    })
+                    .catch(error => {
+                        console.error("マイクのアクセスに失敗しました", error);
+                        status.textContent = "マイクにアクセスできませんでした";
+                    });
+            } else {
+                status.textContent = "このブラウザではマイク機能がサポートされていません";
+            }
+        }
+
+        // ページが読み込まれた時に音声の取得を開始
+        window.onload = startAudio;
+    </script>
+
+</body>
+</html>
