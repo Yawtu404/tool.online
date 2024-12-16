@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像フォーマット変換ツール</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>マルチフォーマット変換ツール</h1>
+        <form id="mediaForm">
+            <label for="mediaInput">ファイルを選択:</label>
+            <input type="file" id="mediaInput" required>
+
+            <label for="formatSelect">変換するフォーマット:</label>
+            <select id="formatSelect" required>
+                <option value="jpeg">JPEG</option>
+                <option value="png">PNG</option>
+                <option value="webp">WebP</option>
+                <option value="bmp">BMP</option>
+                <option value="gif">GIF</option>
+                <option value="raw">RAW</option>
+                <option value="ai">AI</option>
+                <option value="avi">AVI</option>
+                <option value="mpeg">MPEG</option>
+                <option value="wav">WAV</option>
+                <option value="aac">AAC</option>
+                <option value="wma">WMA</option>
+                <option value="eps">EPS</option>
+                <option value="tif">TIF</option>
+            </select>
+
+            <button type="submit">変換する</button>
+        </form>
+
+        <canvas id="canvas" style="display:none;"></canvas>
+        <a id="downloadLink" style="display:none;">変換後のファイルをダウンロード</a>
+    </div>
+
+    <script>
+        document.getElementById('mediaForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const fileInput = document.getElementById('mediaInput');
+            const format = document.getElementById('formatSelect').value;
+            const canvas = document.getElementById('canvas');
+            const downloadLink = document.getElementById('downloadLink');
+
+            if (fileInput.files.length === 0) {
+                alert('ファイルを選択してください。');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const supportedImageFormats = ["jpeg", "png", "webp", "bmp", "gif", "tif"];
+
+            if (supportedImageFormats.includes(format)) {
+                const img = new Image();
+
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    canvas.toBlob(blob => {
+                        const url = URL.createObjectURL(blob);
+                        downloadLink.href = url;
+                        downloadLink.download = `converted_file.${format}`;
+                        downloadLink.textContent = '変換後のファイルをダウンロード';
+                        downloadLink.style.display = 'block';
+                    }, `image/${format}`);
+                };
+
+                const reader = new FileReader();
+                reader.onload = e => {
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert(`${format}形式の変換は現在サポートされていません。このフォーマットには特定のエンコーダーが必要です。`);
+            }
+        });
+    </script>
+</body>
+</html>
