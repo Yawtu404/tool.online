@@ -3,164 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通話アプリ</title>
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f0f0f0; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .participants { margin-top: 20px; }
-        .participant { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background: #fff; transition: border-color 0.1s, background-color 0.1s, opacity 0.1s; }
-        .participant.speaking { border-color: green; background-color: #d4edda; }
-        .participant.mic-off { opacity: 0.5; }
-        .controls { margin-top: 20px; }
-        #toggleMic { padding: 10px; border: none; border-radius: 5px; cursor: pointer; }
-        #toggleMic.on { background-color: green; color: white; }
-        #toggleMic.off { background-color: red; color: white; }
-        #errorMessage { color: red; margin-top: 10px; }
-    </style>
+    <title>簡易通話アプリ</title>
 </head>
 <body>
-    <div class="container">
-        <center><a href="https://onull9999.github.io/tool.online/"><IMG src="aikon.png"></a></center>
-        <h1>通話アプリ</h1>
-        <div>
-            <button id="createCall">通話を作成</button>
-            <p id="callCode"></p>
-        </div>
-        <div>
-            <input type="text" id="codeInput" placeholder="通話コードを入力">
-            <input type="text" id="nameInput" placeholder="表示名を入力">
-            <button id="joinCall">参加</button>
-            <p id="errorMessage"></p>
-        </div>
-        <div class="participants" id="participants"></div>
-        <div class="controls">
-            <button id="toggleMic" class="on">マイクオン</button>
-        </div>
+    <h1>簡易通話アプリ (Firebase + WebRTC)</h1>
+    <div>
+        <button id="createRoom">ルームを作成</button>
+        <button id="joinRoom">ルームに参加</button>
     </div>
+    <video id="localVideo" autoplay playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js"></script>
     <script>
+        // Firebaseの設定
         const firebaseConfig = {
-            apiKey: "AIzaSyDcyyKnRU3btWBfjPNyF_HE6gibCU6pORw",
-  authDomain: "tuuwa-7c367.firebaseapp.com",
-  databaseURL: "https://tuuwa-7c367-default-rtdb.firebaseio.com",
-  projectId: "tuuwa-7c367",
+            apiKey: "AIzaSyCznZCNWfIdQRwka1VG07mlIt4yLAvdSnU",
+            authDomain: "tuuwa-19915.firebaseapp.com",
+            databaseURL: "https://tuuwa-19915-default-rtdb.firebaseio.com",
+            projectId: "tuuwa-19915",
+            storageBucket: "tuuwa-19915.firebasestorage.app",
+            messagingSenderId: "31552805928",
+            appId: "1:31552805928:web:8186313b54cf28841ce91d"
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
 
-        let callCode = null;
-        let userName = null;
-        let micOn = true;
-        let participantId = null; // 既存参加者のIDを追跡
+        // Firebase初期化
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
 
-        document.getElementById('createCall').addEventListener('click', () => {
-            callCode = Math.random().toString(36).substr(2, 8);
-            document.getElementById('callCode').textContent = `通話コード: ${callCode}`;
-            db.collection('calls').doc(callCode).set({ createdAt: new Date() });
-        });
+        // 匿名認証
+        auth.signInAnonymously();
 
-        document.getElementById('joinCall').addEventListener('click', async () => {
-            const codeInput = document.getElementById('codeInput').value.trim();
-            const nameInput = document.getElementById('nameInput').value.trim();
-            const errorMessage = document.getElementById('errorMessage');
+        // HTML要素
+        const createRoomButton = document.getElementById("createRoom");
+        const joinRoomButton = document.getElementById("joinRoom");
+        const localVideo = document.getElementById("localVideo");
+        const remoteVideo = document.getElementById("remoteVideo");
 
-            if (!codeInput || !nameInput) {
-                errorMessage.textContent = "通話コードと名前を入力してください。";
-                return;
-            }
+        // WebRTC関連変数
+        const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }; // Google STUNサーバー
+        let localStream;
+        let peerConnection;
 
-            callCode = codeInput;
-            userName = nameInput;
+        async function createRoom() {
+            const roomRef = database.ref("rooms").push(); // 新しいルームを作成
+            const roomId = roomRef.key;
+            alert(`ルームID: ${roomId}（参加者に共有してください）`);
 
-            const doc = await db.collection('calls').doc(callCode).get();
-            if (!doc.exists) {
-                errorMessage.textContent = `"${callCode}" が存在しません。`;
-                return;
-            }
+            setupConnection(roomRef);
 
-            // 既存の参加者を確認
-            const participantSnapshot = await db.collection('calls').doc(callCode).collection('participants')
-                .where('name', '==', userName).get();
+            // ローカルストリームを取得して接続に追加
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-            if (!participantSnapshot.empty) {
-                // 既存の参加者がいる場合
-                participantId = participantSnapshot.docs[0].id;
-                errorMessage.textContent = ""; // エラーメッセージをリセット
-                alert(`既に通話 "${callCode}" に参加しています。`);
-            } else {
-                // 新しい参加者を追加
-                const newParticipant = await db.collection('calls').doc(callCode).collection('participants').add({
-                    name: userName,
-                    micOn: true,
-                    speaking: false
-                });
-                participantId = newParticipant.id;
-                alert(`通話 "${callCode}" に参加しました`);
-            }
-
-            startAudioProcessing();
-            listenToParticipants();
-        });
-
-        async function startAudioProcessing() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const analyser = audioContext.createAnalyser();
-                const microphone = audioContext.createMediaStreamSource(stream);
-                const javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-
-                analyser.smoothingTimeConstant = 0.8;
-                analyser.fftSize = 1024;
-
-                microphone.connect(analyser);
-                analyser.connect(javascriptNode);
-                javascriptNode.connect(audioContext.destination);
-
-                javascriptNode.onaudioprocess = () => {
-                    const array = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(array);
-                    const volume = array.reduce((a, b) => a + b, 0) / array.length;
-
-                    // 音量が一定値を超えたら話している状態を更新
-                    const speaking = volume > 20; // 音量の閾値を調整
-                    if (participantId) {
-                        db.collection('calls').doc(callCode).collection('participants').doc(participantId).update({ speaking });
-                    }
-                };
-            } catch (error) {
-                console.error("マイクにアクセスできません: ", error);
-            }
+            // オファーを作成
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            roomRef.child("offer").set(offer.toJSON());
         }
 
-        function listenToParticipants() {
-            const participantsDiv = document.getElementById('participants');
-            db.collection('calls').doc(callCode).collection('participants')
-                .onSnapshot(snapshot => {
-                    participantsDiv.innerHTML = '';
-                    snapshot.forEach(doc => {
-                        const participant = doc.data();
-                        const div = document.createElement('div');
-                        div.textContent = participant.name;
-                        div.className = `participant ${participant.speaking ? 'speaking' : ''} ${!participant.micOn ? 'mic-off' : ''}`;
-                        participantsDiv.appendChild(div);
-                    });
-                });
+        async function joinRoom() {
+            const roomId = prompt("参加するルームIDを入力してください:");
+            const roomRef = database.ref("rooms/" + roomId);
+
+            setupConnection(roomRef);
+
+            // ローカルストリームを取得して接続に追加
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            // オファーを監視
+            roomRef.child("offer").on("value", async snapshot => {
+                const offer = snapshot.val();
+                if (!offer) return;
+
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                roomRef.child("answer").set(answer.toJSON());
+            });
         }
 
-        document.getElementById('toggleMic').addEventListener('click', () => {
-            micOn = !micOn;
+        function setupConnection(roomRef) {
+            peerConnection = new RTCPeerConnection(servers);
 
-            const micButton = document.getElementById('toggleMic');
-            micButton.textContent = micOn ? "マイクオン" : "マイクオフ";
-            micButton.className = micOn ? "on" : "off";
+            // ICE候補を監視
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    roomRef.child("candidates").push(event.candidate.toJSON());
+                }
+            };
 
-            if (participantId) {
-                db.collection('calls').doc(callCode).collection('participants').doc(participantId).update({ micOn });
-            }
-        });
+            // リモートストリームを受信
+            peerConnection.ontrack = event => {
+                remoteVideo.srcObject = event.streams[0];
+            };
+
+            // リモートのICE候補を監視
+            roomRef.child("candidates").on("child_added", snapshot => {
+                const candidate = new RTCIceCandidate(snapshot.val());
+                peerConnection.addIceCandidate(candidate);
+            });
+        }
+
+        // ボタンのクリックイベント
+        createRoomButton.addEventListener("click", createRoom);
+        joinRoomButton.addEventListener("click", joinRoom);
     </script>
 </body>
 </html>
