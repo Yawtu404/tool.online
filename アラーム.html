@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>アラームツール</title>
+</head>
+<body>
+  <h2>アラームツール</h2>
+  <label for="alarmTime">アラーム時間を設定：</label>
+  <input type="time" id="alarmTime">
+  <button onclick="setAlarm()">アラームをセット</button>
+  <p id="status">アラームが設定されていません。</p>
+  <p id="remainingTime">残り時間: --:--:--</p>
+
+  <h3>スリープモード防止機能</h3>
+  <button id="sleepToggle" onclick="togglePreventSleep()">スリープ防止をオンにする</button>
+  <p id="sleepStatus">スリープ防止: オフ</p>
+
+  <audio id="alarmSound" src="timer3.mp3" preload="auto"></audio>
+
+  <script>
+    let alarmTime = null;
+    let alarmTimeout = null;
+    let preventSleepInterval = null;
+    let sleepPreventionActive = false;
+    let remainingTimeInterval = null;
+
+    function setAlarm() {
+      const timeInput = document.getElementById('alarmTime').value;
+      if (!timeInput) {
+        alert('アラーム時間を入力してください。');
+        return;
+      }
+
+      const [hours, minutes] = timeInput.split(':').map(Number);
+      const now = new Date();
+      const alarmDate = new Date();
+
+      alarmDate.setHours(hours, minutes, 0, 0);
+
+      if (alarmDate <= now) {
+        alarmDate.setDate(alarmDate.getDate() + 1); // 翌日に設定
+      }
+
+      const timeDifference = alarmDate - now;
+      if (alarmTimeout) clearTimeout(alarmTimeout); // 以前のアラームをクリア
+      if (remainingTimeInterval) clearInterval(remainingTimeInterval); // 残り時間更新をクリア
+
+      alarmTimeout = setTimeout(() => {
+        document.getElementById('status').textContent = 'アラームが鳴っています！';
+        playAlarmSound();
+        clearInterval(remainingTimeInterval); // アラームが鳴ったら残り時間表示を停止
+        document.getElementById('remainingTime').textContent = '残り時間: 00:00:00';
+      }, timeDifference);
+
+      alarmTime = alarmDate;
+      document.getElementById('status').textContent = `アラームが設定されました: ${alarmDate.toLocaleTimeString('ja-JP')}`;
+      updateRemainingTime();
+      remainingTimeInterval = setInterval(updateRemainingTime, 1000); // 1秒ごとに更新
+    }
+
+    function updateRemainingTime() {
+      const now = new Date();
+      const diff = alarmTime - now;
+
+      if (diff <= 0) {
+        clearInterval(remainingTimeInterval); // 残り時間更新を停止
+        document.getElementById('remainingTime').textContent = '残り時間: 00:00:00';
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      document.getElementById('remainingTime').textContent = `残り時間: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function playAlarmSound() {
+      const alarmSound = document.getElementById('alarmSound');
+      alarmSound.play();
+    }
+
+    function togglePreventSleep() {
+      if (sleepPreventionActive) {
+        clearInterval(preventSleepInterval);
+        preventSleepInterval = null;
+        sleepPreventionActive = false;
+        document.getElementById('sleepStatus').textContent = 'スリープ防止: オフ';
+        document.getElementById('sleepToggle').textContent = 'スリープ防止をオンにする';
+        resetBackgroundColor();
+      } else {
+        preventSleep();
+        sleepPreventionActive = true;
+        document.getElementById('sleepStatus').textContent = 'スリープ防止: オン';
+        document.getElementById('sleepToggle').textContent = 'スリープ防止をオフにする';
+      }
+    }
+
+    function preventSleep() {
+      preventSleepInterval = setInterval(() => {
+        console.log('スリープ防止中...');
+        document.body.style.backgroundColor = document.body.style.backgroundColor === 'white' ? 'lightgray' : 'white';
+      }, 10000); // 10秒ごとに実行
+    }
+
+    function resetBackgroundColor() {
+      document.body.style.backgroundColor = 'white';
+    }
+
+    window.onbeforeunload = () => {
+      if (preventSleepInterval) clearInterval(preventSleepInterval);
+      if (remainingTimeInterval) clearInterval(remainingTimeInterval);
+    };
+  </script>
+</body>
+</html>
