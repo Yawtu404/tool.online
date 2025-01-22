@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTMF音再生</title>
+</head>
+<body>
+    <h1>DTMF音再生ツール</h1>
+    <label for="inputText">数字または記号を入力:</label>
+    <input type="text" id="inputText" placeholder="例: 1234*#">
+    <button id="playButton">音を再生</button>
+
+    <script>
+        // DTMFの周波数対応表（電話のボタン）
+        const dtmfFrequencies = {
+            '1': [697, 1209],
+            '2': [697, 1336],
+            '3': [697, 1477],
+            '4': [770, 1209],
+            '5': [770, 1336],
+            '6': [770, 1477],
+            '7': [852, 1209],
+            '8': [852, 1336],
+            '9': [852, 1477],
+            '0': [941, 1336],
+            '*': [941, 1209],
+            '#': [941, 1477]
+        };
+
+        // AudioContextを使用して音を生成
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // DTMF信号を生成する関数
+        function generateDTMF(frequency1, frequency2, duration) {
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            // 各オシレーターを設定
+            oscillator1.type = 'sine';
+            oscillator2.type = 'sine';
+
+            oscillator1.frequency.setValueAtTime(frequency1, audioContext.currentTime);
+            oscillator2.frequency.setValueAtTime(frequency2, audioContext.currentTime);
+
+            // 音の合成
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // 音の再生
+            oscillator1.start();
+            oscillator2.start();
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime); // 音量を設定
+            oscillator1.stop(audioContext.currentTime + duration);
+            oscillator2.stop(audioContext.currentTime + duration);
+        }
+
+        // 入力された文字列を順番に再生する関数
+        function playDTMFSequence(inputString) {
+            let index = 0;
+
+            // 入力文字列の各文字に対してDTMF音を再生
+            function playNext() {
+                if (index >= inputString.length) return; // すべての文字が再生されたら終了
+
+                const char = inputString[index];
+                if (dtmfFrequencies[char]) {
+                    const [frequency1, frequency2] = dtmfFrequencies[char];
+
+                    // 0.1秒〜0.4秒のランダムな再生時間を設定
+                    const randomDuration = Math.random() * (0.4 - 0.1) + 0.1;
+
+                    // DTMF音を生成
+                    generateDTMF(frequency1, frequency2, randomDuration);
+
+                    // 音が再生される時間を待ってから次を再生
+                    setTimeout(() => {
+                        index++;
+                        // 次の音を再生する前に0.1秒のインターバルを空ける
+                        setTimeout(playNext, 100); // 0.1秒後に次の音を再生
+                    }, randomDuration * 1000); // 音の再生時間が終了した後
+                } else {
+                    // DTMF信号に対応しない文字があればスキップ
+                    index++;
+                    playNext();
+                }
+            }
+
+            playNext(); // 再生を開始
+        }
+
+        // ボタンがクリックされたときに音を再生
+        document.getElementById('playButton').addEventListener('click', () => {
+            const inputText = document.getElementById('inputText').value.trim();
+            if (inputText) {
+                playDTMFSequence(inputText); // 入力された文字列の音を再生
+            }
+        });
+    </script>
+</body>
+</html>
