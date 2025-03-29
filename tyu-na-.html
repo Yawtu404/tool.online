@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チューナーツール</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        #tuner-container { margin-top: 20px; }
+        #frequency { font-size: 24px; font-weight: bold; }
+        #note { font-size: 32px; font-weight: bold; color: #007bff; }
+        #indicator { width: 200px; height: 10px; background: #ccc; margin: 20px auto; position: relative; }
+        #needle { width: 10px; height: 10px; background: red; position: absolute; left: 50%; transform: translateX(-50%); border-radius: 50%; }
+    </style>
+    <script>
+        let audioContext, analyser, microphone;
+        
+        async function startTuner() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            microphone.connect(analyser);
+            detectPitch();
+        }
+        
+        function detectPitch() {
+            let buffer = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(buffer);
+            let pitch = autoCorrelate(buffer, audioContext.sampleRate);
+            
+            if (pitch !== -1) {
+                document.getElementById("frequency").innerText = `周波数: ${pitch.toFixed(2)} Hz`;
+                let note = getNoteName(pitch);
+                document.getElementById("note").innerText = `推定音: ${note}`;
+                updateIndicator(pitch);
+            }
+            requestAnimationFrame(detectPitch);
+        }
+        
+        function autoCorrelate(buffer, sampleRate) {
+            let size = buffer.length;
+            let maxLag = Math.floor(size / 2);
+            let bestOffset = -1, bestCorrelation = 0;
+            for (let lag = 0; lag < maxLag; lag++) {
+                let sum = 0;
+                for (let i = 0; i < maxLag; i++) {
+                    sum += buffer[i] * buffer[i + lag];
+                }
+                if (sum > bestCorrelation) {
+                    bestCorrelation = sum;
+                    bestOffset = lag;
+                }
+            }
+            return bestOffset > 0 ? sampleRate / bestOffset : -1;
+        }
+        
+        function getNoteName(frequency) {
+            const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+            let noteNumber = Math.round(12 * (Math.log2(frequency / 440))) + 69;
+            let octave = Math.floor(noteNumber / 12) - 1;
+            return notes[noteNumber % 12] + octave;
+        }
+        
+        function updateIndicator(frequency) {
+            let baseFreq = 440 * Math.pow(2, (Math.round(12 * Math.log2(frequency / 440)) / 12));
+            let offset = (frequency - baseFreq) / baseFreq * 100;
+            offset = Math.max(-50, Math.min(50, offset));
+            document.getElementById("needle").style.left = (50 + offset) + "%";
+        }
+    </script>
+</head>
+<body>
+    <h1>チューナーツール</h1>
+    <button onclick="startTuner()">チューナー開始</button>
+    <div id="tuner-container">
+        <p id="frequency">周波数: - Hz</p>
+        <p id="note">推定音: -</p>
+        <div id="indicator">
+            <div id="needle"></div>
+        </div>
+    </div>
+</body>
+</html>
