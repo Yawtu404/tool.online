@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>GPS付きEXIFビューア</title>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2em;
+      max-width: 600px;
+      margin: auto;
+    }
+    input[type="file"], label {
+      margin-bottom: 1em;
+      display: block;
+    }
+    .info {
+      background: #f9f9f9;
+      padding: 1em;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .info p {
+      margin: 0.5em 0;
+    }
+    .info a {
+      color: #0077cc;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📷 GPS付きEXIFビューア</h1>
+  <p>画像を選ぶと、撮影日時や場所の情報が表示されます。</p>
+  
+  <input type="file" id="imageInput" accept="image/*">
+  
+  <label>
+    <input type="checkbox" id="detailsToggle"> 詳細情報を表示
+  </label>
+  
+  <div id="output" class="info">
+    ここに撮影情報が表示されます。
+  </div>
+
+  <script>
+    function toDecimal(coord, ref) {
+      const d = coord[0].numerator / coord[0].denominator;
+      const m = coord[1].numerator / coord[1].denominator;
+      const s = coord[2].numerator / coord[2].denominator;
+      let decimal = d + (m / 60) + (s / 3600);
+      if (ref === 'S' || ref === 'W') {
+        decimal *= -1;
+      }
+      return decimal.toFixed(6);
+    }
+
+    function getFlashDescription(value) {
+      if (value === undefined) return "不明";
+
+      const fired = value & 0x1;
+      const returnDetection = (value >> 1) & 0x3;
+      const mode = (value >> 3) & 0x3;
+      const redEye = (value >> 6) & 0x1;
+
+      let desc = fired ? "発光" : "非発光";
+
+      if (mode === 1) desc += "（強制発光）";
+      else if (mode === 2) desc += "（強制非発光）";
+      else if (mode === 3) desc += "（自動）";
+
+      if (returnDetection === 2) desc += "、リターン検出あり";
+      else if (returnDetection === 1) desc += "、リターン検出なし";
+
+      if (redEye) desc += "、赤目軽減あり";
+
+      return desc;
+    }
+
+    function displayExif(file) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        const img = new Image();
+        img.onload = function () {
+          EXIF.getData(img, function () {
+            const data = EXIF.getAllTags(this);
+
+            const taken = data.DateTimeOriginal || "不明";
+            const camera = (data.Make || "") + " " + (data.Model || "不明");
+            const fNumber = data.FNumber ? `F${data.FNumber}` : "不明";
+            const exposure = data.ExposureTime ? `${data.ExposureTime} 秒` : "不明";
+            const iso = data.ISOSpeedRatings || "不明";
+
+            let gpsInfo = "<p><strong>📍 GPS情報:</strong> なし</p>";
+            if (data.GPSLatitude && data.GPSLongitude) {
+              const lat = toDecimal(data.GPSLatitude, data.GPSLatitudeRef);
+              const lon = toDecimal(data.GPSLongitude, data.GPSLongitudeRef);
+              gpsInfo = `
+                <p><strong>📍 緯度:</strong> ${lat}</p>
+                <p><strong>📍 経度:</strong> ${lon}</p>
+                <p><a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank">🌍 Googleマップで見る</a></p>
+              `;
+            }
+
+            let detailsHTML = "";
+            if (document.getElementById("detailsToggle").checked) {
+              detailsHTML = `
+                <p><strong>📐 露出補正:</strong> ${data.ExposureBiasValue ?? "不明"}</p>
+                <p><strong>🔦 フラッシュ:</strong> ${getFlashDescription(data.Flash)}</p>
+                <p><strong>🎯 焦点距離:</strong> ${data.FocalLength ?? "不明"}</p>
+                <p><strong>🎨 ホワイトバランス:</strong> ${data.WhiteBalance !== undefined ? (data.WhiteBalance === 0 ? "自動" : "手動") : "不明"}</p>
+                <p><strong>💻 ソフトウェア:</strong> ${data.Software || "不明"}</p>
+              `;
+            }
+
+            const outputHTML = `
+              <p><strong>📅 撮影日時:</strong> ${taken}</p>
+              <p><strong>📷 カメラ:</strong> ${camera}</p>
+              <p><strong>🔍 絞り値 (F値):</strong> ${fNumber}</p>
+              <p><strong>⏱ シャッター速度:</strong> ${exposure}</p>
+              <p><strong>🌟 ISO感度:</strong> ${iso}</p>
+              ${gpsInfo}
+              ${detailsHTML}
+            `;
+
+            document.getElementById('output').innerHTML = outputHTML;
+          });
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById('imageInput').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (file) {
+        displayExif(file);
+      }
+    });
+
+    document.getElementById('detailsToggle').addEventListener('change', function () {
+      const file = document.getElementById('imageInput').files[0];
+      if (file) {
+        displayExif(file);
+      }
+    });
+  </script>
+
+</body>
+</html>
